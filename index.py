@@ -6,7 +6,7 @@ pygame.init()
 # Configuración de pantalla
 ANCHO, ALTO = 800, 600
 pantalla = pygame.display.set_mode((ANCHO, ALTO))
-pygame.display.set_caption("Naves VS - 2 Jugadores")
+pygame.display.set_caption("Batall Aerea")
 
 # Colores
 NEGRO = (0, 0, 0)
