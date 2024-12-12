@@ -1,129 +1,171 @@
 import pygame
+import math
+import sys
 
 # Inicializar Pygame
 pygame.init()
 
-# Configuración de pantalla
-ANCHO, ALTO = 800, 600
-pantalla = pygame.display.set_mode((ANCHO, ALTO))
-pygame.display.set_caption("Batall Aerea")
+# Configurar las dimensiones de la pantalla
+ANCHO = 1500
+ALTO = 700
+screen = pygame.display.set_mode((ANCHO, ALTO))
+pygame.display.set_caption("Batalla de Naves con Sistema de Vida y Disparos")
 
 # Colores
-NEGRO = (0, 0, 0)
-AZUL = (0, 0, 255)
+BLANCO = (0, 0, 0)
 ROJO = (255, 0, 0)
-BLANCO = (255, 255, 255)
+AZUL = (0, 0, 255)
+VERDE = (0, 255, 0)
+NEGRO = (255, 255, 255)
 
-# Deadzone para evitar movimientos erráticos
-DEADZONE = 0.2
+# Cargar imágenes de las naves
+imagen_nave1 = pygame.image.load("assets/Nave1.png")
+imagen_nave2 = pygame.image.load("assets/Nave2.png")
+
+# Redimensionar imágenes para hacerlas más grandes
+imagen_nave1 = pygame.transform.scale(imagen_nave1, (80, 80))
+imagen_nave2 = pygame.transform.scale(imagen_nave2, (80, 80))
+
+# Personajes
+personaje1 = {
+    "x": ANCHO // 3, "y": ALTO // 2, "ancho": 80, "alto": 80,
+    "color": ROJO, "velocidad": 4, "vida": 100, "angulo": 0
+}
+personaje2 = {
+    "x": 2 * ANCHO // 3, "y": ALTO // 6, "ancho": 80, "alto": 80,
+    "color": AZUL, "velocidad": 4, "vida": 100, "angulo": 0
+}
 
 # Inicializar los mandos
 pygame.joystick.init()
-joysticks = [pygame.joystick.Joystick(i) for i in range(pygame.joystick.get_count())]
-for joystick in joysticks:
-    joystick.init()
-    print(f"Mando detectado: {joystick.get_name()}")
+mandos = [pygame.joystick.Joystick(i) for i in range(pygame.joystick.get_count())]
+for mando in mandos:
+    mando.init()
+    print(f"Mando detectado: {mando.get_name()}")
 
-# Clase para las naves
-class Nave(pygame.sprite.Sprite):
-    def __init__(self, color, pos_x, pos_y, direccion_bala):
-        super().__init__()
-        self.image = pygame.Surface((50, 40), pygame.SRCALPHA)
-        pygame.draw.polygon(self.image, color, [(0, 0), (50, 20), (0, 40)])
-        self.rect = self.image.get_rect(center=(pos_x, pos_y))
-        self.velocidad = 5
-        self.direccion_bala = direccion_bala
-        self.balas = pygame.sprite.Group()
+if len(mandos) < 2:
+    print("Se necesitan al menos 2 mandos para controlar a ambos personajes.")
+    pygame.quit()
+    sys.exit()
 
-    def mover(self, eje_x, eje_y):
-        # Deadzone: ignorar valores pequeños para evitar drift
-        if abs(eje_x) < DEADZONE:
-            eje_x = 0
-        if abs(eje_y) < DEADZONE:
-            eje_y = 0
+# Lista para almacenar los disparos
+disparos1 = []
+disparos2 = []
+vel_disparo = 10
 
-        # Movimiento basado en los ejes del joystick
-        self.rect.x += int(eje_x * self.velocidad)
-        self.rect.y += int(eje_y * self.velocidad)
+# Función para actualizar los disparos
+def actualizar_disparos(disparos):
+    for disparo in disparos:
+        disparo["x"] += math.cos(math.radians(disparo["angulo"])) * vel_disparo
+        disparo["y"] -= math.sin(math.radians(disparo["angulo"])) * vel_disparo
+    return [d for d in disparos if 0 < d["x"] < ANCHO and 0 < d["y"] < ALTO]
 
-        # Limitar movimiento dentro de la pantalla
-        self.rect.x = max(0, min(ANCHO - self.rect.width, self.rect.x))
-        self.rect.y = max(0, min(ALTO - self.rect.height, self.rect.y))
+# Función para manejar colisiones
+def chequear_colisiones(disparos, enemigo):
+    for disparo in disparos:
+        if (enemigo["x"] < disparo["x"] < enemigo["x"] + enemigo["ancho"] and
+            enemigo["y"] < disparo["y"] < enemigo["y"] + enemigo["alto"]):
+            # Disparo impacta
+            enemigo["vida"] -= 5
+            if enemigo["vida"] < 0:
+                enemigo["vida"] = 0
+            disparos.remove(disparo)
 
-    def disparar(self):
-        # Crear una bala en la dirección asignada
-        velocidad_x, velocidad_y = self.direccion_bala
-        bala = Bala(self.rect.centerx, self.rect.centery, velocidad_x, velocidad_y)
-        self.balas.add(bala)
+# Función para dibujar barras de vida y nombres
+def dibujar_vida_y_nombres():
+    # Personaje 1
+    pygame.draw.rect(screen, ROJO, (50, 30, 300, 20))
+    pygame.draw.rect(screen, VERDE, (50, 30, personaje1["vida"] * 3, 20))
+    texto1 = fuente.render("Player 1", True, NEGRO)
+    screen.blit(texto1, (50, 5))
 
-    def actualizar_balas(self):
-        # Actualizar balas y eliminarlas si salen de la pantalla
-        self.balas.update()
-        for bala in self.balas:
-            if bala.rect.bottom < 0 or bala.rect.top > ALTO or bala.rect.right < 0 or bala.rect.left > ANCHO:
-                self.balas.remove(bala)
+    # Personaje 2
+    pygame.draw.rect(screen, ROJO, (ANCHO - 350, 30, 300, 20))
+    pygame.draw.rect(screen, VERDE, (ANCHO - 350, 30, personaje2["vida"] * 3, 20))
+    texto2 = fuente.render("Player 2", True, NEGRO)
+    screen.blit(texto2, (ANCHO - 350, 5))
 
-class Bala(pygame.sprite.Sprite):
-    def __init__(self, x, y, velocidad_x, velocidad_y):
-        super().__init__()
-        self.image = pygame.Surface((5, 5))
-        self.image.fill(BLANCO)
-        self.rect = self.image.get_rect(center=(x, y))
-        self.velocidad_x = velocidad_x
-        self.velocidad_y = velocidad_y
+# Función para dibujar personajes con imágenes rotadas
+def dibujar_personaje_con_imagen(personaje, imagen):
+    imagen_rotada = pygame.transform.rotate(imagen, -personaje["angulo"])
+    rect_imagen = imagen_rotada.get_rect(center=(personaje["x"], personaje["y"]))
+    screen.blit(imagen_rotada, rect_imagen)
 
-    def update(self):
-        self.rect.x += self.velocidad_x
-        self.rect.y += self.velocidad_y
-
-# Crear naves
-nave1 = Nave(AZUL, 200, ALTO // 2, (10, 0))  # Dispara hacia la derecha
-nave2 = Nave(ROJO, 600, ALTO // 2, (-10, 0))  # Dispara hacia la izquierda
-grupo_naves = pygame.sprite.Group(nave1, nave2)
-
-# Configuración de FPS
-reloj = pygame.time.Clock()
-FPS = 60
+# Fuente para los textos
+fuente = pygame.font.SysFont("Arial", 24)
 
 # Bucle principal
-corriendo = True
-while corriendo:
-    for evento in pygame.event.get():
-        if evento.type == pygame.QUIT:
-            corriendo = False
+juego = True
+while juego:
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            juego = False
 
-        # Detectar disparos con RT (Axis 5 > 0.9 indica que el gatillo fue presionado)
-        if len(joysticks) >= 2:
-            if evento.type == pygame.JOYAXISMOTION:
-                if evento.joy == 0 and evento.axis == 5 and evento.value > 0.9:
-                    nave1.disparar()
-                elif evento.joy == 1 and evento.axis == 5 and evento.value > 0.9:
-                    nave2.disparar()
+        # Detectar botones del mando
+        if event.type == pygame.JOYBUTTONDOWN:
+            if event.joy == 0:
+                if event.button == 0:  # Botón para disparar
+                    disparos1.append({
+                        "x": personaje1["x"], "y": personaje1["y"], 
+                        "color": ROJO, "angulo": personaje1["angulo"]
+                    })
+                elif event.button == 2:  # Botón para duplicar velocidad
+                    personaje1["velocidad"] *= 2
+            elif event.joy == 1:
+                if event.button == 0:  # Botón para disparar
+                    disparos2.append({
+                        "x": personaje2["x"], "y": personaje2["y"], 
+                        "color": AZUL, "angulo": personaje2["angulo"]
+                    })
+                elif event.button == 2:  # Botón para duplicar velocidad
+                    personaje2["velocidad"] *= 2
 
-    # Leer los ejes de los mandos
-    if len(joysticks) >= 2:
-        # Movimiento de la nave 1
-        eje_x1 = joysticks[0].get_axis(0)  # Eje horizontal del joystick izquierdo
-        eje_y1 = joysticks[0].get_axis(1)  # Eje vertical del joystick izquierdo
-        nave1.mover(eje_x1, eje_y1)
+        if event.type == pygame.JOYBUTTONUP:
+            if event.joy == 0 and event.button == 2:
+                personaje1["velocidad"] = 4
+            elif event.joy == 1 and event.button == 2:
+                personaje2["velocidad"] = 4
 
-        # Movimiento de la nave 2
-        eje_x2 = joysticks[1].get_axis(0)
-        eje_y2 = joysticks[1].get_axis(1)
-        nave2.mover(eje_x2, eje_y2)
+    # Movimiento y rotación
+    mando1 = mandos[0]
+    eje_x1 = mando1.get_axis(0)
+    eje_y1 = mando1.get_axis(1)
+    personaje1["angulo"] = math.degrees(math.atan2(-eje_y1, eje_x1))
+    personaje1["x"] += eje_x1 * personaje1["velocidad"]
+    personaje1["y"] += eje_y1 * personaje1["velocidad"]
 
-    # Actualizar balas
-    nave1.actualizar_balas()
-    nave2.actualizar_balas()
+    mando2 = mandos[1]
+    eje_x2 = mando2.get_axis(0)
+    eje_y2 = mando2.get_axis(1)
+    personaje2["angulo"] = math.degrees(math.atan2(-eje_y2, eje_x2))
+    personaje2["x"] += eje_x2 * personaje2["velocidad"]
+    personaje2["y"] += eje_y2 * personaje2["velocidad"]
 
-    # Dibujar todo
-    pantalla.fill(NEGRO)
-    grupo_naves.draw(pantalla)
-    nave1.balas.draw(pantalla)
-    nave2.balas.draw(pantalla)
+    # Limitar los personajes dentro de la pantalla
+    personaje1["x"] = max(0, min(ANCHO - personaje1["ancho"], personaje1["x"]))
+    personaje1["y"] = max(0, min(ALTO - personaje1["alto"], personaje1["y"]))
+    personaje2["x"] = max(0, min(ANCHO - personaje2["ancho"], personaje2["x"]))
+    personaje2["y"] = max(0, min(ALTO - personaje2["alto"], personaje2["y"]))
+
+    # Actualizar disparos
+    disparos1 = actualizar_disparos(disparos1)
+    disparos2 = actualizar_disparos(disparos2)
+
+    # Chequear colisiones
+    chequear_colisiones(disparos1, personaje2)
+    chequear_colisiones(disparos2, personaje1)
+
+    # Dibujar la pantalla
+    screen.fill(BLANCO)
+    dibujar_vida_y_nombres()
+    dibujar_personaje_con_imagen(personaje1, imagen_nave1)
+    dibujar_personaje_con_imagen(personaje2, imagen_nave2)
+    for disparo in disparos1:
+        pygame.draw.circle(screen, ROJO, (int(disparo["x"]), int(disparo["y"])), 5)
+    for disparo in disparos2:
+             pygame.draw.circle(screen, AZUL, (int(disparo["x"]), int(disparo["y"])), 5)
+
     pygame.display.flip()
 
-    # Configurar FPS
-    reloj.tick(FPS)
-
 pygame.quit()
+sys.exit()
